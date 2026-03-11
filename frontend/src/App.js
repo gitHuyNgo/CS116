@@ -30,10 +30,6 @@ function AppContent() {
     setSearchParams({ view: "shop" });
   };
 
-  const handleOpenDefaultDetail = () => {
-    setSearchParams({ item_id: selectedItemId || STARTING_ITEM_ID });
-  };
-
   const handleGlobalSearch = (term) => {
     const nextParams = { view: "shop" };
     if (term.trim()) {
@@ -45,7 +41,6 @@ function AppContent() {
   return (
     <AmazonLayout
       onOpenShop={handleOpenShop}
-      onOpenDefaultDetail={handleOpenDefaultDetail}
       onGlobalSearch={handleGlobalSearch}
     >
       {showDetailPage ? (

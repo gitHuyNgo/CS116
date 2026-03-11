@@ -79,7 +79,7 @@ def _normalized_items_df() -> pl.DataFrame:
     columns = raw_df.columns
 
     item_id_col = _first_existing(columns, ["item_id", "itemId", "sku", "product_id", "id"])
-    name_col = _first_existing(columns, ["name", "item_name", "product_name", "title"])
+    name_col = _first_existing(columns, ["category", "item_name", "product_name", "title"])
     brand_col = _first_existing(columns, ["brand", "brand_name", "manufacturer"])
     category_col = _first_existing(columns, ["category_l1", "category", "category_name", "department"])
     price_col = _first_existing(columns, ["price", "price_vnd", "sale_price", "selling_price"])

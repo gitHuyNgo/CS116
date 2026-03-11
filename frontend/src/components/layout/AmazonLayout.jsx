@@ -3,7 +3,7 @@ import { Menu, Search, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export const AmazonLayout = ({ onOpenShop, onOpenDefaultDetail, onGlobalSearch, children }) => {
+export const AmazonLayout = ({ onOpenShop, onGlobalSearch, children }) => {
   const [searchTerm, setSearchTerm] = useState("");
 
   const handleSubmit = (event) => {
@@ -18,7 +18,7 @@ export const AmazonLayout = ({ onOpenShop, onOpenDefaultDetail, onGlobalSearch, 
           <button
             type="button"
             className="flex items-center gap-2 border border-transparent px-2 py-1 hover:border-white"
-            onClick={onOpenDefaultDetail}
+            onClick={onOpenShop}
             data-testid="amazon-logo-button"
           >
             <span className="text-lg font-bold leading-none">amazon</span>
@@ -68,17 +68,6 @@ export const AmazonLayout = ({ onOpenShop, onOpenDefaultDetail, onGlobalSearch, 
           >
             <Menu className="mr-1 h-4 w-4" /> Shop
           </Button>
-          <button
-            type="button"
-            onClick={onOpenDefaultDetail}
-            className="px-2 py-1 text-left text-[13px] hover:underline"
-            data-testid="sub-nav-product-detail-button"
-          >
-            Product detail
-          </button>
-          <span className="px-2 py-1 text-[13px]" data-testid="sub-nav-recommendations-label">
-            Frequently bought together
-          </span>
         </div>
       </div>
 

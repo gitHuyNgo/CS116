@@ -87,3 +87,9 @@ User-confirmed expansion:
 2. Add image column handling and product media rendering
 3. Extend recommendation explainability UI
 4. Introduce cart workflow in next iteration if requested
+
+## Incremental Update Log
+### 2026-03-11 (UI/Navigation bug-fix pass)
+- Removed sub-nav entries **Product detail** and **Frequently bought together** from the top-left navigation, keeping only **Shop**.
+- Fixed logo behavior: clicking **amazon.com.vn** now routes to the main shop page (`?view=shop`) instead of opening a single product detail state.
+- Revalidated in browser automation: nav items removed and logo navigation now works as requested.
