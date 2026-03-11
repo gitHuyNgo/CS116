@@ -1,54 +1,72 @@
-import { useEffect } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import { useEffect } from "react";
+import { BrowserRouter, Route, Routes, useSearchParams } from "react-router-dom";
+import { AmazonLayout } from "@/components/layout/AmazonLayout";
+import { ProductDetailPage } from "@/components/product/ProductDetailPage";
+import { ShopPage } from "@/components/shop/ShopPage";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+const STARTING_ITEM_ID = "000804000046";
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
+function AppContent() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedItemId = searchParams.get("item_id");
+  const pageView = searchParams.get("view");
+  const initialQuery = searchParams.get("q") || "";
 
   useEffect(() => {
-    helloWorldApi();
-  }, []);
+    if (!selectedItemId && !pageView) {
+      setSearchParams({ item_id: STARTING_ITEM_ID }, { replace: true });
+    }
+  }, [selectedItemId, pageView, setSearchParams]);
+
+  const showDetailPage = Boolean(selectedItemId);
+
+  const handleItemSelect = (itemId) => {
+    setSearchParams({ item_id: itemId });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleOpenShop = () => {
+    setSearchParams({ view: "shop" });
+  };
+
+  const handleOpenDefaultDetail = () => {
+    setSearchParams({ item_id: selectedItemId || STARTING_ITEM_ID });
+  };
+
+  const handleGlobalSearch = (term) => {
+    const nextParams = { view: "shop" };
+    if (term.trim()) {
+      nextParams.q = term.trim();
+    }
+    setSearchParams(nextParams);
+  };
 
   return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
-
-function App() {
-  return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </div>
+    <AmazonLayout
+      onOpenShop={handleOpenShop}
+      onOpenDefaultDetail={handleOpenDefaultDetail}
+      onGlobalSearch={handleGlobalSearch}
+    >
+      {showDetailPage ? (
+        <ProductDetailPage
+          itemId={selectedItemId || STARTING_ITEM_ID}
+          onBackToShop={handleOpenShop}
+          onOpenItem={handleItemSelect}
+        />
+      ) : (
+        <ShopPage initialQuery={initialQuery} onOpenItem={handleItemSelect} />
+      )}
+    </AmazonLayout>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="*" element={<AppContent />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
