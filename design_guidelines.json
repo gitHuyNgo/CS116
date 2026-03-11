@@ -1,0 +1,128 @@
+{
+  "project_name": "Amazon-Inspired E-commerce (Hybrid Fullstack)",
+  "app_type": "hybrid_fullstack",
+  "theme_mode": "light",
+  "design_philosophy": {
+    "core_principle": "Density & Utility",
+    "description": "A high-density, transactional interface prioritizing information hierarchy and conversion over decorative flair. mimics the visual language of Amazon's 'Ember' design system.",
+    "density": "high",
+    "emotional_tone": "Trustworthy, Efficient, Familiar"
+  },
+  "typography": {
+    "font_family_primary": "Arial, sans-serif",
+    "font_family_secondary": "inherit",
+    "scale": {
+      "base": "13px",
+      "heading_xl": "24px",
+      "heading_lg": "20px",
+      "heading_md": "16px",
+      "body": "13px",
+      "caption": "11px"
+    },
+    "weights": {
+      "regular": 400,
+      "medium": 500,
+      "bold": 700
+    },
+    "rules": [
+      "Use text-[13px] or text-sm for standard body text.",
+      "Use text-xs for secondary metadata (review counts, technical specs).",
+      "Headings should be bold and concise.",
+      "Price text must be distinct (e.g., text-lg or text-xl for main price, text-red-700/80)."
+    ]
+  },
+  "colors": {
+    "palette": {
+      "nav_main": "#131921",
+      "nav_sub": "#232f3e",
+      "link": "#007185",
+      "button_primary": "#FFD814",
+      "button_primary_hover": "#F7CA00",
+      "button_secondary": "#FAFAFA",
+      "button_secondary_border": "#D5D9D9",
+      "price": "#B12704",
+      "star_rating": "#FFA41C",
+      "background": "#FFFFFF",
+      "background_secondary": "#F3F3F3",
+      "border_subtle": "#E7E7E7",
+      "text_main": "#0F1111",
+      "text_secondary": "#565959"
+    },
+    "usage": {
+      "header_background": "nav_main",
+      "subheader_background": "nav_sub",
+      "primary_action": "button_primary",
+      "links": "link",
+      "prices": "price",
+      "stars": "star_rating"
+    }
+  },
+  "layout_strategies": {
+    "global_nav": {
+      "structure": "Full-width, dark background (#131921). Logo left, Search center (white input, orange search button), Cart/Account right.",
+      "sub_nav": "Full-width, lighter dark background (#232f3e). List of links."
+    },
+    "shop_page": {
+      "structure": "Sidebar (left) for filters + Main Grid (right) for products.",
+      "grid": "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4",
+      "card_style": "Border-gray-200 rounded-none or rounded-sm, vertical stack."
+    },
+    "product_detail": {
+      "structure": "Two-column layout on desktop (Left: Image, Right: Details). Max-width container.",
+      "image_section": "Sticky on desktop. 'No Image' placeholder: Aspect ratio square, bg-gray-100, centered gray icon.",
+      "info_section": "Vertical stack: Title > Brand > Rating > Price > Description > Actions."
+    },
+    "recommendation_tray": {
+      "title": "Frequently bought together",
+      "structure": "Horizontal scrolling list or flex-wrap row.",
+      "card_density": "Compact. Thumbnail + Title + Price + Add Button."
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#FFD814] hover:bg-[#F7CA00] text-black border border-[#FCD200] rounded-full px-4 py-1 text-sm shadow-sm",
+      "secondary": "bg-white hover:bg-gray-50 border border-[#D5D9D9] text-black rounded-lg px-4 py-1 text-sm shadow-sm"
+    },
+    "inputs": {
+      "search": "h-10 rounded-l-md border-none focus:ring-2 focus:ring-[#E77600]",
+      "standard": "rounded-md border-gray-300 shadow-sm focus:border-[#e77600] focus:ring focus:ring-[#e77600] focus:ring-opacity-50"
+    },
+    "cards": {
+      "product": "bg-white border border-gray-200 p-4 hover:bg-gray-50 transition-colors cursor-pointer flex flex-col h-full",
+      "recommendation": "w-40 flex-shrink-0 border border-gray-200 p-2 bg-white"
+    },
+    "badges": {
+      "best_seller": "bg-[#C45500] text-white text-xs px-2 py-0.5 font-bold skew-x-[-10deg] inline-block",
+      "discount": "bg-[#CC0C39] text-white text-xs px-1 py-0.5 rounded-sm"
+    },
+    "icons": "Use 'lucide-react'. Size 16px-20px generally. Star icon for ratings."
+  },
+  "interaction_guidelines": {
+    "hover_states": "Links underline on hover. Cards slightly darken or show border change.",
+    "transitions": "Fast (100ms-200ms). No slow fades.",
+    "feedback": "Show loading spinners on async actions (recommendation fetch)."
+  },
+  "functionality_specs": {
+    "currency_format": "vi-VN style (e.g., 129.000 ₫)",
+    "recommendation_logic": "Clicking a recommendation card must update the URL (?item_id=...) and re-render the detail view.",
+    "images": "Use styled 'No image available' placeholders using div and lucide-react ImageOff icon.",
+    "data_test_ids": "REQUIRED. Format: 'product-card-{id}', 'add-to-cart-button', 'search-input'."
+  },
+  "instructions_to_main_agent": [
+    "1. Setup Shadcn components but OVERRIDE styles to match Amazon colors (Yellow buttons, etc).",
+    "2. Create a 'Layout' component that includes the dark Header and Subheader.",
+    "3. Use standard <a> tags or React Router <Link> with #007185 color for text links.",
+    "4. Ensure the backend endpoint /api/recommendations/{item_id} is called when a product is viewed.",
+    "5. Use 'lucide-react' for icons (Search, ShoppingCart, Star, Menu, X).",
+    "6. Do NOT use rounded-xl or large shadows. Keep it rectangular and crisp.",
+    "7. Implement the 'Frequently bought together' section as a distinct visual block below the main product details.",
+    "8. Ensure all prices use the createCurrencyFormatter helper (vi-VN).",
+    "9. Add data-testid to every interactive element for testing."
+  ],
+  "universal_guidelines": [
+    "Do not use gradients for backgrounds.",
+    "Do not center text by default; Left-align is standard for this design.",
+    "Use high contrast for text.",
+    "Ensure the app is responsive (stack columns on mobile)."
+  ]
+}
