@@ -15,7 +15,7 @@ function AppContent() {
 
   useEffect(() => {
     if (!selectedItemId && !pageView) {
-      setSearchParams({ item_id: STARTING_ITEM_ID }, { replace: true });
+      setSearchParams({ view: "shop" }, { replace: true });
     }
   }, [selectedItemId, pageView, setSearchParams]);
 
