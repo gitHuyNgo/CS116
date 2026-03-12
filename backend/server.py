@@ -10,10 +10,10 @@ from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware
 
 
-ROOT_DIR = Path(__file__).parent
+ROOT_DIR = Path(__file__).resolve().parent
 load_dotenv(ROOT_DIR / ".env")
 
-DATA_DIR = Path("/app/data")
+DATA_DIR = ROOT_DIR.parent / "data"
 ITEMS_FILE = DATA_DIR / "items.parquet"
 TRANSACTIONS_FILE = DATA_DIR / "transactions-2025-12.parquet"
 
