@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
-
-import os
 import json
 import logging
+import os
+
 import polars as pl
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI, HTTPException, Query
@@ -15,30 +15,19 @@ ROOT_DIR = Path(__file__).resolve().parent
 load_dotenv(ROOT_DIR / ".env")
 
 DATA_DIR = ROOT_DIR.parent / "data"
-<<<<<<< HEAD
-ITEMS_FILE       = DATA_DIR / "items.parquet"
-=======
 ITEMS_FILE = DATA_DIR / "items.parquet"
->>>>>>> 5a11084 (auto-commit for 41249d8f-d741-4371-a264-8db8069ff7a8)
 TRANSACTIONS_FILE = DATA_DIR / "transactions-2025-12.parquet"
 RECOMMENDATIONS_FILE = DATA_DIR / "recommendations_all.json"
+
 TA_QUERY_VARIANTS = {"tã", "Tã", "tÃ", "TÃ"}
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
-# ============================================================
-# CONFIG
-# ============================================================
-TOP_K      = 10
-MAX_BASKET = 20
-SIZE_ORDER = {"NB": 1, "S": 2, "M": 3, "L": 4, "XL": 5, "XXL": 6, "XXXL": 7}
-DEDUP_KEYS = ["item_id", "category", "price"]
 
-
-# ============================================================
-# SCHEMAS
-# ============================================================
+# ==============================
+# Schemas
+# ==============================
 class ProductItem(BaseModel):
     item_id: str
     name: str
@@ -59,29 +48,17 @@ class ProductFiltersResponse(BaseModel):
     brands: List[str]
 
 
-class UpsellItem(BaseModel):
-    item_id: str
-    size: Optional[str] = None
-    score: int
+class RecommendedItem(ProductItem):
+    frequency: Optional[int] = None
+    relevance_score: Optional[int] = None
 
 
 class RecommendationResponse(BaseModel):
-    item_id: str
-    type: str                          # "tã" | "non-tã"
-    similar_items: List[str]
-    upsell_recommendations: List[UpsellItem]
+    target_item_id: str
+    frequently_bought_together: List[RecommendedItem]
+    relevant: List[RecommendedItem]
 
 
-<<<<<<< HEAD
-# ============================================================
-# FILE-LEVEL CACHE
-# ============================================================
-_cache: Dict[str, object] = {
-    "items_df":         None,
-    "items_mtime":      None,
-    "cobuy_matrix":     None,
-    "cobuy_mtime":      None,
-=======
 class SearchSuggestedItem(BaseModel):
     item_id: str
     name: str
@@ -117,53 +94,73 @@ _cache: Dict[str, object] = {
     "transactions_mtime": None,
     "recommendations_rules": None,
     "recommendations_mtime": None,
->>>>>>> 5a11084 (auto-commit for 41249d8f-d741-4371-a264-8db8069ff7a8)
 }
 
 
-# ============================================================
-# DATA LOADING & ENRICHMENT
-# ============================================================
-def _load_items() -> pl.DataFrame:
+# ==============================
+# Helpers
+# ==============================
+def _first_existing(columns: List[str], candidates: List[str]) -> Optional[str]:
+    for c in candidates:
+        if c in columns:
+            return c
+    return None
+
+
+def _safe_score(value: object) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _is_ta_query(query_text: str) -> bool:
+    return any(v in query_text for v in TA_QUERY_VARIANTS)
+
+
+def _is_ta_type(item_type: object) -> bool:
+    return str(item_type or "").strip() in TA_QUERY_VARIANTS
+
+
+def _normalized_items_df() -> pl.DataFrame:
     if not ITEMS_FILE.exists():
-<<<<<<< HEAD
-        raise HTTPException(status_code=500, detail=f"Missing: {ITEMS_FILE}")
-=======
         raise HTTPException(
             status_code=500,
-            detail=f"Missing data file: {ITEMS_FILE}. Please add items.parquet to /app/data.",
+            detail=f"Missing data file: {ITEMS_FILE}. Please add items.parquet to /data.",
         )
 
     raw_df = pl.read_parquet(ITEMS_FILE)
-    columns = raw_df.columns
+    cols = raw_df.columns
 
-    item_id_col = _first_existing(columns, ["item_id", "itemId", "sku", "product_id", "id"])
-    name_col = _first_existing(columns, ["name", "item_name", "product_name", "title", "category"])
-    brand_col = _first_existing(columns, ["brand", "brand_name", "manufacturer"])
-    category_col = _first_existing(columns, ["category_l1", "category", "category_name", "department"])
-    price_col = _first_existing(columns, ["price", "price_vnd", "sale_price", "selling_price"])
-    sale_status_col = _first_existing(columns, ["sale_status", "status", "is_active", "available"])
-    rating_col = _first_existing(columns, ["rating", "avg_rating", "stars"])
+    item_id_col = _first_existing(cols, ["item_id", "itemId", "sku", "product_id", "id"])
+    name_col = _first_existing(cols, ["name", "item_name", "product_name", "title", "category"])
+    brand_col = _first_existing(cols, ["brand", "brand_name", "manufacturer"])
+    category_col = _first_existing(cols, ["category_l1", "category", "category_name", "department"])
+    price_col = _first_existing(cols, ["price", "price_vnd", "sale_price", "selling_price"])
+    sale_status_col = _first_existing(cols, ["sale_status", "status", "is_active", "available"])
+    rating_col = _first_existing(cols, ["rating", "avg_rating", "stars"])
 
-    required_cols = {
+    required = {
         "item_id": item_id_col,
         "name": name_col,
-        "brand": brand_col,
-        "category_l1": category_col,
         "price": price_col,
     }
-    missing_fields = [field for field, col in required_cols.items() if col is None]
-    if missing_fields:
+    missing = [k for k, v in required.items() if v is None]
+    if missing:
         raise HTTPException(
             status_code=500,
-            detail=f"items.parquet is missing required fields: {', '.join(missing_fields)}",
+            detail=f"items.parquet is missing required fields: {', '.join(missing)}",
         )
 
     selection = [
         pl.col(item_id_col).cast(pl.Utf8).alias("item_id"),
         pl.col(name_col).cast(pl.Utf8).alias("name"),
-        pl.col(brand_col).cast(pl.Utf8).alias("brand"),
-        pl.col(category_col).cast(pl.Utf8).alias("category_l1"),
+        (pl.col(brand_col).cast(pl.Utf8).alias("brand") if brand_col else pl.lit("Unknown brand").alias("brand")),
+        (
+            pl.col(category_col).cast(pl.Utf8).alias("category_l1")
+            if category_col
+            else pl.lit("Uncategorized").alias("category_l1")
+        ),
         pl.col(price_col).cast(pl.Float64, strict=False).alias("price"),
         (
             pl.col(sale_status_col).cast(pl.Int64, strict=False).alias("sale_status")
@@ -176,271 +173,119 @@ def _load_items() -> pl.DataFrame:
             else pl.lit(None).cast(pl.Float64).alias("rating")
         ),
     ]
->>>>>>> 5a11084 (auto-commit for 41249d8f-d741-4371-a264-8db8069ff7a8)
 
     return (
-        pl.read_parquet(ITEMS_FILE)
-        .filter(pl.col("sale_status") == 1)
-        .with_columns([
-            # Parse size token từ description
-            pl.col("description")
-                .str.extract(r"(?i)(NB|XXXL|XXL|XL|S|M|L)", 1)
-                .str.to_uppercase()
-                .alias("_size_from_desc"),
-            # Parse size token từ cột size
-            pl.col("size")
-                .str.extract(r"(?i)(NB|XXXL|XXL|XL|S|M|L)", 1)
-                .str.to_uppercase()
-                .alias("_size_from_col"),
-        ])
-        .with_columns([
-            # size_list: desc → size col → NULL
-            pl.when(pl.col("_size_from_desc").is_not_null())
-                .then(pl.col("_size_from_desc"))
-                .when(pl.col("_size_from_col").is_not_null())
-                .then(pl.col("_size_from_col"))
-                .otherwise(None)
-                .alias("size_list"),
-        ])
-        .drop(["_size_from_desc", "_size_from_col"])
-        .unique(subset=DEDUP_KEYS, keep="first", maintain_order=True)
+        raw_df.select(selection)
+        .with_columns(
+            [
+                pl.col("item_id").fill_null(""),
+                pl.col("name").fill_null("Unknown item"),
+                pl.col("brand").fill_null("Unknown brand"),
+                pl.col("category_l1").fill_null("Uncategorized"),
+                pl.col("price").fill_null(0.0),
+                pl.col("sale_status").fill_null(0),
+            ]
+        )
+        .filter(pl.col("item_id") != "")
+        .unique(subset=["item_id"], keep="first")
     )
 
 
-def _load_transactions() -> pl.DataFrame:
+def _normalized_transactions_df() -> pl.DataFrame:
     if not TRANSACTIONS_FILE.exists():
-        raise HTTPException(status_code=500, detail=f"Missing: {TRANSACTIONS_FILE}")
-    return pl.read_parquet(TRANSACTIONS_FILE).select([
-        pl.col("customer_id").cast(pl.Utf8),
-        pl.col("item_id").cast(pl.Utf8),
-    ]).filter(
-        (pl.col("customer_id") != "") & (pl.col("item_id") != "")
+        return pl.DataFrame({"customer_id": [], "item_id": []})
+
+    raw_df = pl.read_parquet(TRANSACTIONS_FILE)
+    cols = raw_df.columns
+
+    customer_col = _first_existing(cols, ["customer_id", "user_id", "buyer_id"])
+    item_id_col = _first_existing(cols, ["item_id", "itemId", "product_id", "sku"])
+
+    if customer_col is None or item_id_col is None:
+        return pl.DataFrame({"customer_id": [], "item_id": []})
+
+    return (
+        raw_df.select(
+            [
+                pl.col(customer_col).cast(pl.Utf8).alias("customer_id"),
+                pl.col(item_id_col).cast(pl.Utf8).alias("item_id"),
+            ]
+        )
+        .with_columns([pl.col("customer_id").fill_null(""), pl.col("item_id").fill_null("")])
+        .filter((pl.col("customer_id") != "") & (pl.col("item_id") != ""))
     )
 
 
-def _get_items() -> pl.DataFrame:
+def _get_items_df() -> pl.DataFrame:
     mtime = ITEMS_FILE.stat().st_mtime if ITEMS_FILE.exists() else None
     if _cache["items_df"] is None or _cache["items_mtime"] != mtime:
-        _cache["items_df"]    = _load_items()
+        _cache["items_df"] = _normalized_items_df()
         _cache["items_mtime"] = mtime
     return _cache["items_df"]
 
 
-def _get_cobuy_matrix(items_df: pl.DataFrame) -> pl.DataFrame:
-    """Co-occurrence matrix — rebuilt khi file transaction thay đổi."""
+def _get_transactions_df() -> pl.DataFrame:
     mtime = TRANSACTIONS_FILE.stat().st_mtime if TRANSACTIONS_FILE.exists() else None
-    if _cache["cobuy_matrix"] is not None and _cache["cobuy_mtime"] == mtime:
-        return _cache["cobuy_matrix"]
-
-    transactions = _load_transactions()
-    valid_ids = items_df["item_id"].to_list()
-
-    basket = (
-        transactions
-        .group_by("customer_id")
-        .agg(pl.col("item_id").unique().alias("items"))
-        .with_columns(pl.col("items").list.head(MAX_BASKET))
-        .filter(pl.col("items").list.len() >= 2)
-    )
-
-    basket_a = basket.lazy().explode("items").rename({"items": "item_a"})
-    basket_b = basket.lazy().explode("items").rename({"items": "item_b"})
-
-    co_occur = (
-        basket_a
-        .join(basket_b, on="customer_id")
-        .filter(pl.col("item_a") < pl.col("item_b"))
-        .group_by(["item_a", "item_b"])
-        .agg(pl.len().alias("freq"))
-        .collect()
-    )
-
-    mirror = co_occur.select([
-        pl.col("item_b").alias("item_a"),
-        pl.col("item_a").alias("item_b"),
-        pl.col("freq"),
-    ])
-    matrix = (
-        pl.concat([co_occur, mirror])
-        .filter(
-            pl.col("item_a").is_in(valid_ids) &
-            pl.col("item_b").is_in(valid_ids)
-        )
-    )
-
-    _cache["cobuy_matrix"] = matrix
-    _cache["cobuy_mtime"]  = mtime
-    return matrix
+    if _cache["transactions_df"] is None or _cache["transactions_mtime"] != mtime:
+        _cache["transactions_df"] = _normalized_transactions_df()
+        _cache["transactions_mtime"] = mtime
+    return _cache["transactions_df"]
 
 
-# ============================================================
-# RECOMMENDATION LOGIC
-# ============================================================
-def _get_upsell(items_df: pl.DataFrame, query_id: str, is_ta: bool) -> List[UpsellItem]:
-    """
-    Upsell: cùng category, size >= size hiện tại.
-    Nếu is_ta → chỉ tìm trong category_l1 == "Tã".
-    Score: cùng size=8, size lớn hơn=20.
-    """
+def _get_recommendation_rules() -> Dict[str, Dict[str, Any]]:
+    mtime = RECOMMENDATIONS_FILE.stat().st_mtime if RECOMMENDATIONS_FILE.exists() else None
+    if _cache["recommendations_rules"] is not None and _cache["recommendations_mtime"] == mtime:
+        return _cache["recommendations_rules"]  # type: ignore[return-value]
+
+    if not RECOMMENDATIONS_FILE.exists():
+        _cache["recommendations_rules"] = {}
+        _cache["recommendations_mtime"] = None
+        return {}
+
+    parsed_entries: List[Dict[str, Any]] = []
     try:
-        target = items_df.filter(pl.col("item_id") == query_id).row(0, named=True)
+        with RECOMMENDATIONS_FILE.open("r", encoding="utf-8") as f:
+            payload = json.load(f)
+
+        if isinstance(payload, list):
+            parsed_entries = [x for x in payload if isinstance(x, dict)]
+        elif isinstance(payload, dict):
+            if isinstance(payload.get("data"), list):
+                parsed_entries = [x for x in payload["data"] if isinstance(x, dict)]
+            elif "item_id" in payload:
+                parsed_entries = [payload]
+            else:
+                for key, value in payload.items():
+                    if isinstance(value, dict):
+                        v = {**value}
+                        v.setdefault("item_id", str(key))
+                        parsed_entries.append(v)
     except Exception:
-        return []
+        parsed_entries = []
 
-    q_size_val = SIZE_ORDER.get(target["size_list"] or "", 0)
-    q_cat      = target["category"]
+    indexed: Dict[str, Dict[str, Any]] = {}
+    for entry in parsed_entries:
+        iid = str(entry.get("item_id", "")).strip()
+        if iid:
+            indexed[iid] = entry
 
-    size_map_expr = (
-        pl.col("size_list")
-        .replace_strict(SIZE_ORDER, default=0)
-        .fill_null(0)
-    )
-
-    # Tã: restrict toàn bộ category_l1 == "Tã"; non-Tã: cùng leaf category
-    cat_filter = (
-        pl.col("category_l1").str.to_lowercase() == "tã"
-    ) if is_ta else (
-        pl.col("category") == q_cat
-    )
-
-    candidates = items_df.filter(
-        (pl.col("item_id") != query_id)
-        & cat_filter
-        & (size_map_expr >= q_size_val)
-    )
-
-    q_size = target["size_list"]
-    same_size_expr = (
-        pl.col("size_list").is_null() & pl.lit(q_size is None)
-    ) if q_size is None else (
-        pl.col("size_list") == q_size
-    )
-
-    scored = candidates.with_columns([
-        pl.when(same_size_expr).then(pl.lit(8))
-        .when(size_map_expr > q_size_val).then(pl.lit(20))
-        .otherwise(pl.lit(1))
-        .alias("upsale_score")
-    ]).sort("upsale_score", descending=True).head(TOP_K)
-
-    return [
-        UpsellItem(
-            item_id=row["item_id"],
-            size=row["size_list"],
-            score=row["upsale_score"],
-        )
-        for row in scored.iter_rows(named=True)
-    ]
+    _cache["recommendations_rules"] = indexed
+    _cache["recommendations_mtime"] = mtime
+    return indexed
 
 
-def _get_similar(
-    items_df: pl.DataFrame,
-    cobuy_matrix: pl.DataFrame,
-    query_id: str,
-    is_ta: bool,
-) -> List[str]:
-    """
-    Similar hybrid:
-      Non-Tã: final_score = freq * cat_score  (l3=3, l2=2)
-      Tã:     final_score = freq * upsale_score (cùng size=8, size lớn hơn=20)
-    freq=0 → score=0 → xếp cuối.
-    """
-    try:
-        target = items_df.filter(pl.col("item_id") == query_id).row(0, named=True)
-    except Exception:
-        return []
-
-    cobuy_q = (
-        cobuy_matrix
-        .filter(pl.col("item_a") == query_id)
-        .select(["item_b", "freq"])
-        .rename({"item_b": "item_id"})
-    )
-
-    q_l3 = target.get("category_l3")
-    q_l2 = target.get("category_l2")
-
-    # Tã: restrict toàn bộ candidates vào category_l1 == "Tã" trước
-    # Non-Tã: tìm theo l3/l2 trong toàn catalog (Tã vẫn xuất hiện nếu match)
-    base_filter = (
-        (pl.col("item_id") != query_id)
-        & (pl.col("category_l1").str.to_lowercase() == "tã")
-        & (
-            (pl.col("category_l3") == q_l3) |
-            (pl.col("category_l2") == q_l2)
-        )
-    ) if is_ta else (
-        (pl.col("item_id") != query_id)
-        & (
-            (pl.col("category_l3") == q_l3) |
-            (pl.col("category_l2") == q_l2)
-        )
-    )
-
-    candidates = items_df.filter(base_filter).with_columns(
-        pl.when(pl.col("category_l3") == q_l3)
-            .then(pl.lit(3))
-            .otherwise(pl.lit(2))
-            .alias("cat_score")
-    ).join(cobuy_q, on="item_id", how="left").with_columns(
-        pl.col("freq").fill_null(0)
-    )
-
-    if not is_ta:
-        scored = candidates.with_columns(
-            (pl.col("freq") * pl.col("cat_score")).alias("final_score")
-        )
-    else:
-        q_size_val = SIZE_ORDER.get(target.get("size_list") or "", 0)
-        size_map_expr = (
-            pl.col("size_list")
-            .replace_strict(SIZE_ORDER, default=0)
-            .fill_null(0)
-        )
-        t_size = target.get("size_list")
-        same_size_expr = (
-            pl.col("size_list").is_null() & pl.lit(t_size is None)
-        ) if t_size is None else (
-            pl.col("size_list") == t_size
-        )
-        scored = candidates.with_columns(
-            pl.when(same_size_expr).then(pl.lit(8))
-            .when(size_map_expr > q_size_val).then(pl.lit(20))
-            .otherwise(pl.lit(1))
-            .alias("upsale_score")
-        ).with_columns(
-            (pl.col("freq") * pl.col("upsale_score")).alias("final_score")
-        )
-
-    return (
-        scored
-        .sort("final_score", descending=True)
-        .head(TOP_K)
-        ["item_id"]
-        .to_list()
-    )
-
-
-# ============================================================
-# HELPERS
-# ============================================================
-def _row_to_item(row: Dict) -> ProductItem:
+def _row_to_item(row: Dict[str, object]) -> ProductItem:
     return ProductItem(
         item_id=str(row.get("item_id", "")),
-        name=str(row.get("category", "Unknown")),   # name = category per schema
+        name=str(row.get("name", "Unknown item")),
         brand=str(row.get("brand", "Unknown brand")),
         category_l1=str(row.get("category_l1", "Uncategorized")),
         price=float(row.get("price", 0.0) or 0.0),
         sale_status=int(row.get("sale_status", 0) or 0),
-        rating=float(row["rating"]) if row.get("rating") is not None else None,
+        rating=(float(row["rating"]) if row.get("rating") is not None else None),
     )
 
 
-<<<<<<< HEAD
-# ============================================================
-# ROUTES
-# ============================================================
-=======
 def _row_to_search_item(row: Dict[str, object]) -> SearchSuggestedItem:
     return SearchSuggestedItem(
         item_id=str(row.get("item_id", "")),
@@ -448,64 +293,6 @@ def _row_to_search_item(row: Dict[str, object]) -> SearchSuggestedItem:
         price=float(row.get("price", 0.0) or 0.0),
         sale_status=int(row.get("sale_status", 0) or 0),
     )
-
-
-def _is_ta_query(query_text: str) -> bool:
-    return any(variant in query_text for variant in TA_QUERY_VARIANTS)
-
-
-def _safe_score(value: object) -> float:
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _is_ta_type(item_type: object) -> bool:
-    normalized_type = str(item_type or "").strip()
-    return normalized_type in TA_QUERY_VARIANTS
-
-
-def _get_recommendation_rules() -> Dict[str, Dict[str, Any]]:
-    mtime = RECOMMENDATIONS_FILE.stat().st_mtime if RECOMMENDATIONS_FILE.exists() else None
-    if _cache["recommendations_rules"] is not None and _cache["recommendations_mtime"] == mtime:
-        return _cache["recommendations_rules"]
-
-    if not RECOMMENDATIONS_FILE.exists():
-        _cache["recommendations_rules"] = {}
-        _cache["recommendations_mtime"] = None
-        return _cache["recommendations_rules"]
-
-    parsed_entries: List[Dict[str, Any]] = []
-    try:
-        with RECOMMENDATIONS_FILE.open("r", encoding="utf-8") as file_ref:
-            payload = json.load(file_ref)
-
-        if isinstance(payload, list):
-            parsed_entries = [entry for entry in payload if isinstance(entry, dict)]
-        elif isinstance(payload, dict):
-            if isinstance(payload.get("data"), list):
-                parsed_entries = [entry for entry in payload["data"] if isinstance(entry, dict)]
-            elif "item_id" in payload:
-                parsed_entries = [payload]
-            else:
-                for key, value in payload.items():
-                    if isinstance(value, dict):
-                        normalized_value = {**value}
-                        normalized_value.setdefault("item_id", str(key))
-                        parsed_entries.append(normalized_value)
-    except Exception:
-        parsed_entries = []
-
-    indexed_rules: Dict[str, Dict[str, Any]] = {}
-    for entry in parsed_entries:
-        entry_item_id = str(entry.get("item_id", "")).strip()
-        if entry_item_id:
-            indexed_rules[entry_item_id] = entry
-
-    _cache["recommendations_rules"] = indexed_rules
-    _cache["recommendations_mtime"] = mtime
-    return indexed_rules
 
 
 def _search_items_df(items_df: pl.DataFrame, query_text: str) -> pl.DataFrame:
@@ -521,7 +308,9 @@ def _search_items_df(items_df: pl.DataFrame, query_text: str) -> pl.DataFrame:
     )
 
 
->>>>>>> 5a11084 (auto-commit for 41249d8f-d741-4371-a264-8db8069ff7a8)
+# ==============================
+# Routes
+# ==============================
 @api_router.get("/")
 async def root():
     return {"message": "Recommendation API is live"}
@@ -529,12 +318,27 @@ async def root():
 
 @api_router.get("/items/meta", response_model=ProductFiltersResponse)
 async def list_filter_metadata():
-    df = _get_items()
+    items_df = _get_items_df().filter(pl.col("sale_status") == 1)
+
+    categories = (
+        items_df.select("category_l1")
+        .drop_nulls()
+        .unique()
+        .sort("category_l1")
+        .to_series()
+        .to_list()
+    )
+    brands = (
+        items_df.select("brand")
+        .drop_nulls()
+        .unique()
+        .sort("brand")
+        .to_series()
+        .to_list()
+    )
     return ProductFiltersResponse(
-        categories=df.select("category_l1").drop_nulls().unique().sort("category_l1")
-                     .to_series().to_list(),
-        brands=df.select("brand").drop_nulls().unique().sort("brand")
-                  .to_series().to_list(),
+        categories=[str(v) for v in categories if str(v).strip()],
+        brands=[str(v) for v in brands if str(v).strip()],
     )
 
 
@@ -543,113 +347,96 @@ async def list_items(
     q: str = Query(default="", max_length=120),
     category: str = Query(default="", max_length=120),
     brand: str = Query(default="", max_length=120),
-    sort_by: Literal["category", "price", "brand", "item_id"] = "category",
+    sort_by: Literal["name", "price", "brand", "item_id"] = "name",
     sort_dir: Literal["asc", "desc"] = "asc",
     limit: int = Query(default=24, ge=1, le=120),
     offset: int = Query(default=0, ge=0),
 ):
-    df = _get_items()
+    df = _get_items_df().filter(pl.col("sale_status") == 1)
 
     if q.strip():
-<<<<<<< HEAD
-        t = q.strip().lower()
-        # Nếu query chứa "tã" → chỉ search trong category_l1 == "Tã"
-        # Ngược lại → search toàn catalog (Tã vẫn có thể xuất hiện nếu match)
-        if "tã" in t:
-            df = df.filter(pl.col("category_l1").str.to_lowercase() == "tã")
-        else:
-            df = df.filter(
-                pl.col("category").str.to_lowercase().str.contains(t, literal=True)
-                | pl.col("brand").str.to_lowercase().str.contains(t, literal=True)
-                | pl.col("item_id").str.to_lowercase().str.contains(t, literal=True)
-                | pl.col("category_l1").str.to_lowercase().str.contains(t, literal=True)
-            )
-=======
         df = _search_items_df(df, q)
 
->>>>>>> 5a11084 (auto-commit for 41249d8f-d741-4371-a264-8db8069ff7a8)
     if category.strip():
-        df = df.filter(pl.col("category_l1").str.to_lowercase() == category.strip().lower())
+        c = category.strip().lower()
+        df = df.filter(pl.col("category_l1").str.to_lowercase() == c)
+
     if brand.strip():
-        df = df.filter(pl.col("brand").str.to_lowercase() == brand.strip().lower())
+        b = brand.strip().lower()
+        df = df.filter(pl.col("brand").str.to_lowercase() == b)
 
     total = df.height
-    paged = df.sort(sort_by, descending=(sort_dir == "desc")).slice(offset, limit)
-    return ProductCatalogResponse(total=total, items=[_row_to_item(r) for r in paged.to_dicts()])
+    paged_df = df.sort(sort_by, descending=(sort_dir == "desc")).slice(offset, limit)
+
+    return ProductCatalogResponse(total=total, items=[_row_to_item(r) for r in paged_df.to_dicts()])
 
 
 @api_router.get("/search-recommendations", response_model=SearchRecommendationResponse)
 async def get_search_recommendations(q: str = Query(default="", max_length=120)):
     query_text = q.strip()
-    is_ta_query = _is_ta_query(query_text)
+    is_ta = _is_ta_query(query_text)
+
     if not query_text:
         return SearchRecommendationResponse(
             query="",
             matched_item_id=None,
             similar_items=[],
             upsell_recommendations=[],
-            is_ta_query=is_ta_query,
+            is_ta_query=is_ta,
         )
 
     items_df = _get_items_df()
-    matches_df = _search_items_df(items_df, query_text)
-    if matches_df.height == 0:
+    matches = _search_items_df(items_df, query_text)
+    if matches.height == 0:
         return SearchRecommendationResponse(
             query=query_text,
             matched_item_id=None,
             similar_items=[],
             upsell_recommendations=[],
-            is_ta_query=is_ta_query,
+            is_ta_query=is_ta,
         )
 
-    matched_item = matches_df.sort("name").to_dicts()[0]
+    matched_item = matches.sort("name").to_dicts()[0]
     matched_item_id = str(matched_item.get("item_id", ""))
     item_map = {
-        str(row.get("item_id", "")).strip(): row
-        for row in items_df.to_dicts()
-        if str(row.get("item_id", "")).strip()
+        str(r.get("item_id", "")).strip(): r
+        for r in items_df.to_dicts()
+        if str(r.get("item_id", "")).strip()
     }
 
     rule = _get_recommendation_rules().get(matched_item_id, {})
 
     similar_items: List[SearchSuggestedItem] = []
-    for similar_id in rule.get("similar_items", []):
-        row = item_map.get(str(similar_id).strip())
+    for sid in rule.get("similar_items", []):
+        row = item_map.get(str(sid).strip())
         if row:
             similar_items.append(_row_to_search_item(row))
 
-    upsell_recommendations: List[UpsellSuggestion] = []
-    if is_ta_query:
-        sortable_upsells: List[UpsellSuggestion] = []
-        for upsell in rule.get("upsell_recommendations", []):
-            if not isinstance(upsell, dict):
+    upsell_items: List[UpsellSuggestion] = []
+    if is_ta:
+        temp: List[UpsellSuggestion] = []
+        for u in rule.get("upsell_recommendations", []):
+            if not isinstance(u, dict):
                 continue
-
-            upsell_item_id = str(upsell.get("item_id", "")).strip()
-            if not upsell_item_id:
+            uid = str(u.get("item_id", "")).strip()
+            if not uid or uid not in item_map:
                 continue
-
-            row = item_map.get(upsell_item_id)
-            if not row:
-                continue
-
-            sortable_upsells.append(
+            temp.append(
                 UpsellSuggestion(
-                    **_row_to_search_item(row).model_dump(),
-                    size=(str(upsell.get("size")) if upsell.get("size") is not None else None),
-                    score=_safe_score(upsell.get("score")),
+                    **_row_to_search_item(item_map[uid]).model_dump(),
+                    size=(str(u.get("size")) if u.get("size") is not None else None),
+                    score=_safe_score(u.get("score")),
                 )
             )
-
-        sortable_upsells.sort(key=lambda item: item.score, reverse=True)
-        upsell_recommendations = sortable_upsells[:5]
+        temp.sort(key=lambda x: x.score, reverse=True)
+        upsell_items = temp[:5]
 
     return SearchRecommendationResponse(
         query=query_text,
         matched_item_id=matched_item_id,
         similar_items=similar_items,
-        upsell_recommendations=upsell_recommendations,
-        is_ta_query=is_ta_query,
+        upsell_recommendations=upsell_items,
+        is_ta_query=is_ta,
     )
 
 
@@ -657,9 +444,9 @@ async def get_search_recommendations(q: str = Query(default="", max_length=120))
 async def get_item_rule_recommendations(item_id: str):
     items_df = _get_items_df()
     item_map = {
-        str(row.get("item_id", "")).strip(): row
-        for row in items_df.to_dicts()
-        if str(row.get("item_id", "")).strip()
+        str(r.get("item_id", "")).strip(): r
+        for r in items_df.to_dicts()
+        if str(r.get("item_id", "")).strip()
     }
 
     if item_id not in item_map:
@@ -676,83 +463,143 @@ async def get_item_rule_recommendations(item_id: str):
         )
 
     similar_items: List[SearchSuggestedItem] = []
-    for similar_id in rule.get("similar_items", []):
-        row = item_map.get(str(similar_id).strip())
+    for sid in rule.get("similar_items", []):
+        row = item_map.get(str(sid).strip())
         if row:
             similar_items.append(_row_to_search_item(row))
 
     item_type = str(rule.get("type", "")).strip() or None
-    upsell_recommendations: List[UpsellSuggestion] = []
+    upsell_items: List[UpsellSuggestion] = []
+
     if _is_ta_type(item_type):
-        sortable_upsells: List[UpsellSuggestion] = []
-        for upsell in rule.get("upsell_recommendations", []):
-            if not isinstance(upsell, dict):
+        temp: List[UpsellSuggestion] = []
+        for u in rule.get("upsell_recommendations", []):
+            if not isinstance(u, dict):
                 continue
-
-            upsell_item_id = str(upsell.get("item_id", "")).strip()
-            if not upsell_item_id:
+            uid = str(u.get("item_id", "")).strip()
+            if not uid or uid not in item_map:
                 continue
-
-            row = item_map.get(upsell_item_id)
-            if not row:
-                continue
-
-            sortable_upsells.append(
+            temp.append(
                 UpsellSuggestion(
-                    **_row_to_search_item(row).model_dump(),
-                    size=(str(upsell.get("size")) if upsell.get("size") is not None else None),
-                    score=_safe_score(upsell.get("score")),
+                    **_row_to_search_item(item_map[uid]).model_dump(),
+                    size=(str(u.get("size")) if u.get("size") is not None else None),
+                    score=_safe_score(u.get("score")),
                 )
             )
-
-        sortable_upsells.sort(key=lambda rec: rec.score, reverse=True)
-        upsell_recommendations = sortable_upsells[:5]
+        temp.sort(key=lambda x: x.score, reverse=True)
+        upsell_items = temp[:5]
 
     return ItemRuleRecommendationResponse(
         target_item_id=item_id,
         item_type=item_type,
         has_rule=True,
         similar_items=similar_items,
-        upsell_recommendations=upsell_recommendations,
+        upsell_recommendations=upsell_items,
     )
 
 
 @api_router.get("/items/{item_id}", response_model=ProductItem)
-async def get_item(item_id: str):
-    row = _get_items().filter(pl.col("item_id") == item_id)
+async def get_item_details(item_id: str):
+    row = _get_items_df().filter((pl.col("item_id") == item_id) & (pl.col("sale_status") == 1))
     if row.height == 0:
-        raise HTTPException(status_code=404, detail=f"Item '{item_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Item '{item_id}' not found or unavailable")
     return _row_to_item(row.to_dicts()[0])
 
 
 @api_router.get("/recommendations/{item_id}", response_model=RecommendationResponse)
 async def get_recommendations(item_id: str):
-    items_df = _get_items()
-
+    """
+    Legacy endpoint (kept for compatibility):
+    - Frequently bought together from transactions
+    - Relevant by category/brand + price proximity
+    """
+    items_df = _get_items_df().filter(pl.col("sale_status") == 1)
     target_df = items_df.filter(pl.col("item_id") == item_id)
+
     if target_df.height == 0:
-        raise HTTPException(status_code=404, detail=f"Item '{item_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Item '{item_id}' not found or unavailable")
 
-    target  = target_df.row(0, named=True)
-    is_ta   = (target.get("category_l1") or "").strip() == "Tã"
-    item_type = "tã" if is_ta else "non-tã"
+    target = target_df.to_dicts()[0]
+    target_brand = str(target.get("brand", ""))
+    target_category = str(target.get("category_l1", ""))
+    target_price = float(target.get("price", 0.0) or 0.0)
 
-    cobuy_matrix  = _get_cobuy_matrix(items_df)
-    similar_items = _get_similar(items_df, cobuy_matrix, item_id, is_ta)
-    upsell        = _get_upsell(items_df, item_id, is_ta) if is_ta else []
+    transactions_df = _get_transactions_df()
+    customer_pool = transactions_df.filter(pl.col("item_id") == item_id).select("customer_id").unique()
+
+    frequently_bought: List[RecommendedItem] = []
+    if customer_pool.height > 0:
+        companion_counts = (
+            transactions_df.join(customer_pool, on="customer_id", how="inner")
+            .filter(pl.col("item_id") != item_id)
+            .group_by("item_id")
+            .agg(pl.len().alias("frequency"))
+            .sort("frequency", descending=True)
+            .head(20)
+        )
+
+        fbt_df = (
+            companion_counts.join(items_df, on="item_id", how="inner")
+            .sort("frequency", descending=True)
+            .head(5)
+        )
+
+        frequently_bought = [
+            RecommendedItem(**_row_to_item(r).model_dump(), frequency=int(r.get("frequency", 0) or 0))
+            for r in fbt_df.to_dicts()
+        ]
+
+    relevant_df = (
+        items_df.filter(pl.col("item_id") != item_id)
+        .with_columns(
+            [
+                (
+                    pl.when(pl.col("category_l1") == target_category).then(2).otherwise(0)
+                    + pl.when(pl.col("brand") == target_brand).then(1).otherwise(0)
+                ).alias("relevance_score"),
+                (pl.col("price") - pl.lit(target_price)).abs().alias("price_gap"),
+            ]
+        )
+        .filter(pl.col("relevance_score") > 0)
+        .sort(["relevance_score", "price_gap"], descending=[True, False])
+        .head(5)
+    )
+
+    if relevant_df.height < 5:
+        existing_ids = relevant_df.select("item_id").to_series().to_list() if relevant_df.height else []
+        fallback_df = (
+            items_df.filter((pl.col("item_id") != item_id) & (~pl.col("item_id").is_in(existing_ids)))
+            .with_columns(
+                [
+                    pl.lit(0).alias("relevance_score"),
+                    (pl.col("price") - pl.lit(target_price)).abs().alias("price_gap"),
+                ]
+            )
+            .sort("price_gap")
+            .head(5 - relevant_df.height)
+        )
+        relevant_df = pl.concat([relevant_df, fallback_df], how="vertical")
+
+    relevant = [
+        RecommendedItem(
+            **_row_to_item(r).model_dump(),
+            relevance_score=int(r.get("relevance_score", 0) or 0),
+        )
+        for r in relevant_df.to_dicts()
+    ]
 
     return RecommendationResponse(
-        item_id=item_id,
-        type=item_type,
-        similar_items=similar_items,
-        upsell_recommendations=upsell,
+        target_item_id=item_id,
+        frequently_bought_together=frequently_bought,
+        relevant=relevant,
     )
 
 
-# ============================================================
-# APP SETUP
-# ============================================================
+# ==============================
+# App setup
+# ==============================
 app.include_router(api_router)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
