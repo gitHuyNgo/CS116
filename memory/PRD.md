@@ -93,3 +93,13 @@ User-confirmed expansion:
 - Removed sub-nav entries **Product detail** and **Frequently bought together** from the top-left navigation, keeping only **Shop**.
 - Fixed logo behavior: clicking **amazon.com.vn** now routes to the main shop page (`?view=shop`) instead of opening a single product detail state.
 - Revalidated in browser automation: nav items removed and logo navigation now works as requested.
+
+### 2026-03-18 (JSON search recommendation flow)
+- Added new backend endpoint `GET /api/search-recommendations?q=` that reads `/app/data/recommendations_all.json` and maps rules by `item_id`.
+- Implemented exact ta-variant rule handling (`tã`, `Tã`, `tÃ`, `TÃ`):
+  - ta query → show `similar_items` + `upsell_recommendations` (top 5 by highest score)
+  - non-ta query → show only `similar_items`
+- Added frontend “Search recommendations from JSON” panel on Shop page, driven by both header global search and sidebar search.
+- Rendered `sale_status` as green badge (`item_status: 1`) across product cards, detail view, and recommendation cards.
+- Updated app startup routing so first open defaults to `?view=shop`.
+- Validation complete with manual curl, Playwright screenshots, and testing-agent regression (no blocking defects).
