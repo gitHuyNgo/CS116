@@ -120,3 +120,7 @@ User-confirmed expansion:
 - Removed the **“Search recommendations from JSON”** and shop-level upsell/similar blocks from the main Shop page while searching.
 - Kept only the product catalog grid + filters on Shop page search results.
 - Preserved JSON-rule recommendation behavior on item detail page (as requested) and verified via browser screenshot checks.
+
+### 2026-03-18 (Upsell card simplification)
+- Removed **Score** display from detail-page upsell recommendation cards.
+- Updated upsell section title text to **“Upsell recommendations”** (without score wording).

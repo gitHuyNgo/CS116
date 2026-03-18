@@ -49,7 +49,6 @@ const RecommendationRow = ({ title, items, sectionId, onOpenItem, showUpsellMeta
             {showUpsellMeta && (
               <div className="mt-2 text-xs text-[#565959]" data-testid={`${sectionId}-item-upsell-meta-${item.item_id}`}>
                 <p data-testid={`${sectionId}-item-size-${item.item_id}`}>Size: {item.size || "N/A"}</p>
-                <p data-testid={`${sectionId}-item-score-${item.item_id}`}>Score: {Number(item.score || 0)}</p>
               </div>
             )}
             <p className="mt-1 text-sm font-bold text-[#B12704]" data-testid={`${sectionId}-item-price-${item.item_id}`}>
@@ -211,7 +210,7 @@ export const ProductDetailPage = ({ itemId, onBackToShop, onOpenItem }) => {
 
       {isTaItem && (
         <RecommendationRow
-          title="Upsell recommendations (top 5 score)"
+          title="Upsell recommendations"
           items={ruleRecommendations.upsell_recommendations}
           sectionId="rule-upsell-items"
           onOpenItem={onOpenItem}
