@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ImageOff, Loader2, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { fetchItemById, fetchRecommendations } from "@/lib/api";
+import { fetchItemById, fetchItemRuleRecommendations } from "@/lib/api";
 import { formatVnd } from "@/lib/currency";
 
 const StatusBadge = ({ saleStatus, testId }) => (
@@ -13,7 +13,7 @@ const StatusBadge = ({ saleStatus, testId }) => (
   </span>
 );
 
-const RecommendationRow = ({ title, items, sectionId, onOpenItem }) => (
+const RecommendationRow = ({ title, items, sectionId, onOpenItem, showUpsellMeta = false }) => (
   <section className="space-y-2 border border-[#e7e7e7] bg-white p-3" data-testid={`${sectionId}-section`}>
     <h2 className="text-base font-bold" data-testid={`${sectionId}-title`}>
       {title}
@@ -46,6 +46,12 @@ const RecommendationRow = ({ title, items, sectionId, onOpenItem }) => (
             <div className="mt-2" data-testid={`${sectionId}-item-status-wrapper-${item.item_id}`}>
               <StatusBadge saleStatus={item.sale_status} testId={`${sectionId}-item-status-${item.item_id}`} />
             </div>
+            {showUpsellMeta && (
+              <div className="mt-2 text-xs text-[#565959]" data-testid={`${sectionId}-item-upsell-meta-${item.item_id}`}>
+                <p data-testid={`${sectionId}-item-size-${item.item_id}`}>Size: {item.size || "N/A"}</p>
+                <p data-testid={`${sectionId}-item-score-${item.item_id}`}>Score: {Number(item.score || 0)}</p>
+              </div>
+            )}
             <p className="mt-1 text-sm font-bold text-[#B12704]" data-testid={`${sectionId}-item-price-${item.item_id}`}>
               {formatVnd(item.price)}
             </p>
@@ -58,9 +64,11 @@ const RecommendationRow = ({ title, items, sectionId, onOpenItem }) => (
 
 export const ProductDetailPage = ({ itemId, onBackToShop, onOpenItem }) => {
   const [item, setItem] = useState(null);
-  const [recommendations, setRecommendations] = useState({
-    frequently_bought_together: [],
-    relevant: [],
+  const [ruleRecommendations, setRuleRecommendations] = useState({
+    has_rule: false,
+    item_type: null,
+    similar_items: [],
+    upsell_recommendations: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -70,14 +78,16 @@ export const ProductDetailPage = ({ itemId, onBackToShop, onOpenItem }) => {
       setLoading(true);
       setError("");
       try {
-        const [productResponse, recommendationResponse] = await Promise.all([
+        const [productResponse, ruleRecommendationResponse] = await Promise.all([
           fetchItemById(itemId),
-          fetchRecommendations(itemId),
+          fetchItemRuleRecommendations(itemId),
         ]);
         setItem(productResponse);
-        setRecommendations({
-          frequently_bought_together: recommendationResponse.frequently_bought_together || [],
-          relevant: recommendationResponse.relevant || [],
+        setRuleRecommendations({
+          has_rule: Boolean(ruleRecommendationResponse?.has_rule),
+          item_type: ruleRecommendationResponse?.item_type || null,
+          similar_items: ruleRecommendationResponse?.similar_items || [],
+          upsell_recommendations: ruleRecommendationResponse?.upsell_recommendations || [],
         });
       } catch (fetchError) {
         const message = fetchError?.response?.data?.detail || "Không thể tải thông tin sản phẩm.";
@@ -91,6 +101,7 @@ export const ProductDetailPage = ({ itemId, onBackToShop, onOpenItem }) => {
   }, [itemId]);
 
   const ratingValue = useMemo(() => Number(item?.rating || 4.2), [item]);
+  const isTaItem = ["tã", "Tã", "tÃ", "TÃ"].includes(ruleRecommendations?.item_type || "");
 
   if (loading) {
     return (
@@ -183,20 +194,30 @@ export const ProductDetailPage = ({ itemId, onBackToShop, onOpenItem }) => {
           </div>
         </div>
       </div>
-
       <RecommendationRow
-        title="Frequently bought together"
-        items={recommendations.frequently_bought_together}
-        sectionId="frequently-bought"
+        title="Similar items"
+        items={ruleRecommendations.similar_items}
+        sectionId="rule-similar-items"
         onOpenItem={onOpenItem}
       />
 
-      <RecommendationRow
-        title="Relevant alternatives"
-        items={recommendations.relevant}
-        sectionId="relevant-items"
-        onOpenItem={onOpenItem}
-      />
+      {!ruleRecommendations.has_rule ? (
+        <section className="border border-[#e7e7e7] bg-white p-3" data-testid="rule-recommendation-empty-state">
+          <p className="text-xs text-[#565959]" data-testid="rule-recommendation-empty-message">
+            No recommendations available for this item.
+          </p>
+        </section>
+      ) : null}
+
+      {isTaItem && (
+        <RecommendationRow
+          title="Upsell recommendations (top 5 score)"
+          items={ruleRecommendations.upsell_recommendations}
+          sectionId="rule-upsell-items"
+          onOpenItem={onOpenItem}
+          showUpsellMeta
+        />
+      )}
     </div>
   );
 };

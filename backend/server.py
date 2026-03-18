@@ -102,6 +102,14 @@ class SearchRecommendationResponse(BaseModel):
     is_ta_query: bool
 
 
+class ItemRuleRecommendationResponse(BaseModel):
+    target_item_id: str
+    item_type: Optional[str] = None
+    has_rule: bool
+    similar_items: List[SearchSuggestedItem]
+    upsell_recommendations: List[UpsellSuggestion]
+
+
 _cache: Dict[str, object] = {
     "items_df": None,
     "items_mtime": None,
@@ -453,6 +461,11 @@ def _safe_score(value: object) -> float:
         return 0.0
 
 
+def _is_ta_type(item_type: object) -> bool:
+    normalized_type = str(item_type or "").strip()
+    return normalized_type in TA_QUERY_VARIANTS
+
+
 def _get_recommendation_rules() -> Dict[str, Dict[str, Any]]:
     mtime = RECOMMENDATIONS_FILE.stat().st_mtime if RECOMMENDATIONS_FILE.exists() else None
     if _cache["recommendations_rules"] is not None and _cache["recommendations_mtime"] == mtime:
@@ -637,6 +650,70 @@ async def get_search_recommendations(q: str = Query(default="", max_length=120))
         similar_items=similar_items,
         upsell_recommendations=upsell_recommendations,
         is_ta_query=is_ta_query,
+    )
+
+
+@api_router.get("/item-recommendations/{item_id}", response_model=ItemRuleRecommendationResponse)
+async def get_item_rule_recommendations(item_id: str):
+    items_df = _get_items_df()
+    item_map = {
+        str(row.get("item_id", "")).strip(): row
+        for row in items_df.to_dicts()
+        if str(row.get("item_id", "")).strip()
+    }
+
+    if item_id not in item_map:
+        raise HTTPException(status_code=404, detail=f"Item '{item_id}' not found")
+
+    rule = _get_recommendation_rules().get(item_id)
+    if not rule:
+        return ItemRuleRecommendationResponse(
+            target_item_id=item_id,
+            item_type=None,
+            has_rule=False,
+            similar_items=[],
+            upsell_recommendations=[],
+        )
+
+    similar_items: List[SearchSuggestedItem] = []
+    for similar_id in rule.get("similar_items", []):
+        row = item_map.get(str(similar_id).strip())
+        if row:
+            similar_items.append(_row_to_search_item(row))
+
+    item_type = str(rule.get("type", "")).strip() or None
+    upsell_recommendations: List[UpsellSuggestion] = []
+    if _is_ta_type(item_type):
+        sortable_upsells: List[UpsellSuggestion] = []
+        for upsell in rule.get("upsell_recommendations", []):
+            if not isinstance(upsell, dict):
+                continue
+
+            upsell_item_id = str(upsell.get("item_id", "")).strip()
+            if not upsell_item_id:
+                continue
+
+            row = item_map.get(upsell_item_id)
+            if not row:
+                continue
+
+            sortable_upsells.append(
+                UpsellSuggestion(
+                    **_row_to_search_item(row).model_dump(),
+                    size=(str(upsell.get("size")) if upsell.get("size") is not None else None),
+                    score=_safe_score(upsell.get("score")),
+                )
+            )
+
+        sortable_upsells.sort(key=lambda rec: rec.score, reverse=True)
+        upsell_recommendations = sortable_upsells[:5]
+
+    return ItemRuleRecommendationResponse(
+        target_item_id=item_id,
+        item_type=item_type,
+        has_rule=True,
+        similar_items=similar_items,
+        upsell_recommendations=upsell_recommendations,
     )
 
 

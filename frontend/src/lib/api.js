@@ -26,6 +26,11 @@ export const fetchRecommendations = async (itemId) => {
   return response.data;
 };
 
+export const fetchItemRuleRecommendations = async (itemId) => {
+  const response = await client.get(`/item-recommendations/${itemId}`);
+  return response.data;
+};
+
 export const fetchSearchRecommendations = async (query) => {
   const response = await client.get("/search-recommendations", {
     params: { q: query },
