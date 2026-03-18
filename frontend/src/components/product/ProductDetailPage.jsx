@@ -4,6 +4,15 @@ import { Button } from "@/components/ui/button";
 import { fetchItemById, fetchRecommendations } from "@/lib/api";
 import { formatVnd } from "@/lib/currency";
 
+const StatusBadge = ({ saleStatus, testId }) => (
+  <span
+    className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-medium ${Number(saleStatus) === 1 ? "bg-[#e7f8ee] text-[#067d2f]" : "bg-[#f3f4f6] text-[#6b7280]"}`}
+    data-testid={testId}
+  >
+    item_status: {saleStatus}
+  </span>
+);
+
 const RecommendationRow = ({ title, items, sectionId, onOpenItem }) => (
   <section className="space-y-2 border border-[#e7e7e7] bg-white p-3" data-testid={`${sectionId}-section`}>
     <h2 className="text-base font-bold" data-testid={`${sectionId}-title`}>
@@ -34,6 +43,9 @@ const RecommendationRow = ({ title, items, sectionId, onOpenItem }) => (
             <p className="mt-1 text-xs text-[#007185]" data-testid={`${sectionId}-item-brand-${item.item_id}`}>
               {item.brand}
             </p>
+            <div className="mt-2" data-testid={`${sectionId}-item-status-wrapper-${item.item_id}`}>
+              <StatusBadge saleStatus={item.sale_status} testId={`${sectionId}-item-status-${item.item_id}`} />
+            </div>
             <p className="mt-1 text-sm font-bold text-[#B12704]" data-testid={`${sectionId}-item-price-${item.item_id}`}>
               {formatVnd(item.price)}
             </p>
@@ -127,6 +139,9 @@ export const ProductDetailPage = ({ itemId, onBackToShop, onOpenItem }) => {
             <p className="text-[13px]" data-testid="product-detail-brand">
               Thương hiệu: <span className="text-[#007185]">{item.brand}</span>
             </p>
+            <div data-testid="product-detail-status-wrapper">
+              <StatusBadge saleStatus={item.sale_status} testId="product-detail-sale-status" />
+            </div>
             <div className="flex items-center gap-2" data-testid="product-detail-rating">
               <div className="flex items-center">
                 {Array.from({ length: 5 }).map((_, index) => (

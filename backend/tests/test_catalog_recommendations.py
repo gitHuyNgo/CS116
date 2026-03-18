@@ -88,6 +88,17 @@ def normalized_tx_df():
     )
 
 
+@pytest.fixture(scope="session")
+def target_item_id(api_client):
+    response = api_client.get(f"{BASE_URL}/api/items", params={"limit": 1, "offset": 0})
+    if response.status_code != 200:
+        pytest.skip("Unable to fetch catalog for target item fixture")
+    items = response.json().get("items", [])
+    if not items:
+        pytest.skip("No active catalog items available")
+    return items[0]["item_id"]
+
+
 def test_items_catalog_returns_only_sale_status_1(api_client, normalized_items_df):
     response = api_client.get(f"{BASE_URL}/api/items", params={"limit": 120, "offset": 0})
     assert response.status_code == 200
@@ -143,11 +154,11 @@ def test_items_catalog_excludes_known_unavailable_item(api_client, normalized_it
     assert unavailable_id not in returned_ids
 
 
-def test_get_item_details_for_sale_status_1_item(api_client):
-    response = api_client.get(f"{BASE_URL}/api/items/{TARGET_ITEM_ID}")
+def test_get_item_details_for_sale_status_1_item(api_client, target_item_id):
+    response = api_client.get(f"{BASE_URL}/api/items/{target_item_id}")
     assert response.status_code == 200
     data = response.json()
-    assert data["item_id"] == TARGET_ITEM_ID
+    assert data["item_id"] == target_item_id
     assert data["sale_status"] == 1
     assert isinstance(data["name"], str) and data["name"].strip() != ""
 
@@ -162,20 +173,20 @@ def test_get_item_details_returns_404_for_unavailable_item(api_client, normalize
     assert response.status_code == 404
 
 
-def test_recommendations_frequently_bought_matches_tx_frequency(api_client, normalized_items_df, normalized_tx_df):
-    response = api_client.get(f"{BASE_URL}/api/recommendations/{TARGET_ITEM_ID}")
+def test_recommendations_frequently_bought_matches_tx_frequency(api_client, normalized_items_df, normalized_tx_df, target_item_id):
+    response = api_client.get(f"{BASE_URL}/api/recommendations/{target_item_id}")
     assert response.status_code == 200
     payload = response.json()
-    assert payload["target_item_id"] == TARGET_ITEM_ID
+    assert payload["target_item_id"] == target_item_id
     assert "frequently_bought_together" in payload
 
     active_ids = set(
         normalized_items_df.filter(pl.col("sale_status") == 1).select("item_id").to_series().to_list()
     )
-    customer_pool = normalized_tx_df.filter(pl.col("item_id") == TARGET_ITEM_ID).select("customer_id").unique()
+    customer_pool = normalized_tx_df.filter(pl.col("item_id") == target_item_id).select("customer_id").unique()
     expected = (
         normalized_tx_df.join(customer_pool, on="customer_id", how="inner")
-        .filter(pl.col("item_id") != TARGET_ITEM_ID)
+        .filter(pl.col("item_id") != target_item_id)
         .group_by("item_id")
         .agg(pl.len().alias("frequency"))
         .filter(pl.col("item_id").is_in(list(active_ids)))
@@ -194,17 +205,17 @@ def test_recommendations_frequently_bought_matches_tx_frequency(api_client, norm
         assert actual[-1]["frequency"] >= min_expected_frequency
 
 
-def test_recommendations_relevant_stream_matches_category_brand_logic(api_client, normalized_items_df):
-    response = api_client.get(f"{BASE_URL}/api/recommendations/{TARGET_ITEM_ID}")
+def test_recommendations_relevant_stream_matches_category_brand_logic(api_client, normalized_items_df, target_item_id):
+    response = api_client.get(f"{BASE_URL}/api/recommendations/{target_item_id}")
     assert response.status_code == 200
     payload = response.json()
     relevant = payload["relevant"]
     assert isinstance(relevant, list)
     assert len(relevant) <= 5
 
-    target = normalized_items_df.filter(pl.col("item_id") == TARGET_ITEM_ID).to_dicts()[0]
+    target = normalized_items_df.filter(pl.col("item_id") == target_item_id).to_dicts()[0]
     matching_pool = normalized_items_df.filter(
-        (pl.col("item_id") != TARGET_ITEM_ID)
+        (pl.col("item_id") != target_item_id)
         & (pl.col("sale_status") == 1)
         & ((pl.col("category_l1") == target["category_l1"]) | (pl.col("brand") == target["brand"]))
     )
@@ -215,8 +226,8 @@ def test_recommendations_relevant_stream_matches_category_brand_logic(api_client
         assert any((item["category_l1"] == target["category_l1"]) or (item["brand"] == target["brand"]) for item in relevant)
 
 
-def test_recommendations_only_returns_sale_status_1_items(api_client):
-    response = api_client.get(f"{BASE_URL}/api/recommendations/{TARGET_ITEM_ID}")
+def test_recommendations_only_returns_sale_status_1_items(api_client, target_item_id):
+    response = api_client.get(f"{BASE_URL}/api/recommendations/{target_item_id}")
     assert response.status_code == 200
     payload = response.json()
     all_recos = payload["frequently_bought_together"] + payload["relevant"]

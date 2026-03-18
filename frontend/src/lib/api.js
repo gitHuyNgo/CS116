@@ -25,3 +25,10 @@ export const fetchRecommendations = async (itemId) => {
   const response = await client.get(`/recommendations/${itemId}`);
   return response.data;
 };
+
+export const fetchSearchRecommendations = async (query) => {
+  const response = await client.get("/search-recommendations", {
+    params: { q: query },
+  });
+  return response.data;
+};
