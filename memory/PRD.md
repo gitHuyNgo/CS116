@@ -115,3 +115,8 @@ User-confirmed expansion:
   - **Upsell recommendations (top 5 score)** only for ta items
 - Confirmed behavior across all entry points: direct `?item_id=`, shop-card clicks, and recommendation-card clicks.
 - Regression validated by testing agent (`iteration_3.json`, backend 15 passed / 5 skipped, frontend checks passed).
+
+### 2026-03-18 (Shop-page cleanup)
+- Removed the **“Search recommendations from JSON”** and shop-level upsell/similar blocks from the main Shop page while searching.
+- Kept only the product catalog grid + filters on Shop page search results.
+- Preserved JSON-rule recommendation behavior on item detail page (as requested) and verified via browser screenshot checks.

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { fetchCatalog, fetchFilterMeta, fetchSearchRecommendations } from "@/lib/api";
+import { fetchCatalog, fetchFilterMeta } from "@/lib/api";
 import { formatVnd } from "@/lib/currency";
 
 const PAGE_SIZE = 20;
@@ -41,34 +41,6 @@ const ProductCard = ({ item, onOpenItem }) => (
   </button>
 );
 
-const SearchRecommendationCard = ({ item, sectionId, onOpenItem, showUpsellMeta = false }) => (
-  <button
-    type="button"
-    onClick={() => onOpenItem(item.item_id)}
-    className="w-[220px] flex-shrink-0 border border-[#e7e7e7] bg-white p-3 text-left hover:bg-[#f9f9f9]"
-    data-testid={`${sectionId}-card-${item.item_id}`}
-  >
-    <p className="text-xs text-[#565959]" data-testid={`${sectionId}-card-id-${item.item_id}`}>
-      {item.item_id}
-    </p>
-    <p className="mt-1 line-clamp-2 min-h-[34px] text-[13px] font-medium" data-testid={`${sectionId}-card-name-${item.item_id}`}>
-      {item.name}
-    </p>
-    <div className="mt-2" data-testid={`${sectionId}-card-status-wrapper-${item.item_id}`}>
-      <StatusBadge saleStatus={item.sale_status} testId={`${sectionId}-card-status-${item.item_id}`} />
-    </div>
-    {showUpsellMeta && (
-      <div className="mt-2 text-xs text-[#565959]" data-testid={`${sectionId}-card-upsell-meta-${item.item_id}`}>
-        <p data-testid={`${sectionId}-card-size-${item.item_id}`}>Size: {item.size || "N/A"}</p>
-        <p data-testid={`${sectionId}-card-score-${item.item_id}`}>Score: {Number(item.score || 0)}</p>
-      </div>
-    )}
-    <p className="mt-2 text-sm font-bold text-[#B12704]" data-testid={`${sectionId}-card-price-${item.item_id}`}>
-      {formatVnd(item.price)}
-    </p>
-  </button>
-);
-
 export const ShopPage = ({ initialQuery, onOpenItem }) => {
   const [searchText, setSearchText] = useState(initialQuery);
   const [category, setCategory] = useState("");
@@ -83,14 +55,6 @@ export const ShopPage = ({ initialQuery, onOpenItem }) => {
   const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [searchRecommendationData, setSearchRecommendationData] = useState({
-    matched_item_id: null,
-    similar_items: [],
-    upsell_recommendations: [],
-    is_ta_query: false,
-  });
-  const [searchRecommendationLoading, setSearchRecommendationLoading] = useState(false);
-  const [searchRecommendationError, setSearchRecommendationError] = useState("");
 
   useEffect(() => {
     setSearchText(initialQuery);
@@ -145,49 +109,6 @@ export const ShopPage = ({ initialQuery, onOpenItem }) => {
     loadCatalog();
   }, [queryParams]);
 
-  useEffect(() => {
-    const queryValue = searchText.trim();
-    if (!queryValue) {
-      setSearchRecommendationData({
-        matched_item_id: null,
-        similar_items: [],
-        upsell_recommendations: [],
-        is_ta_query: false,
-      });
-      setSearchRecommendationError("");
-      setSearchRecommendationLoading(false);
-      return;
-    }
-
-    const loadSearchRecommendations = async () => {
-      setSearchRecommendationLoading(true);
-      setSearchRecommendationError("");
-
-      try {
-        const response = await fetchSearchRecommendations(queryValue);
-        setSearchRecommendationData({
-          matched_item_id: response?.matched_item_id || null,
-          similar_items: response?.similar_items || [],
-          upsell_recommendations: response?.upsell_recommendations || [],
-          is_ta_query: Boolean(response?.is_ta_query),
-        });
-      } catch (fetchError) {
-        const message = fetchError?.response?.data?.detail || "Không thể tải gợi ý từ recommendations_all.json.";
-        setSearchRecommendationError(message);
-        setSearchRecommendationData({
-          matched_item_id: null,
-          similar_items: [],
-          upsell_recommendations: [],
-          is_ta_query: false,
-        });
-      } finally {
-        setSearchRecommendationLoading(false);
-      }
-    };
-
-    loadSearchRecommendations();
-  }, [searchText]);
-
   const handleResetFilters = () => {
     setSearchText("");
     setCategory("");
@@ -199,9 +120,6 @@ export const ShopPage = ({ initialQuery, onOpenItem }) => {
 
   const pageStart = offset + 1;
   const pageEnd = Math.min(offset + PAGE_SIZE, total);
-  const hasActiveSearch = Boolean(searchText.trim());
-  const hasSimilarItems = searchRecommendationData.similar_items.length > 0;
-  const hasUpsellItems = searchRecommendationData.upsell_recommendations.length > 0;
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]" data-testid="shop-page">
@@ -314,82 +232,6 @@ export const ShopPage = ({ initialQuery, onOpenItem }) => {
             {total > 0 ? `Hiển thị ${pageStart}-${pageEnd} / ${total} sản phẩm` : "Không có sản phẩm"}
           </p>
         </div>
-
-        {hasActiveSearch && (
-          <section className="space-y-3 border border-[#e7e7e7] bg-white p-3" data-testid="shop-search-recommendations-section">
-            <h2 className="text-sm font-bold" data-testid="shop-search-recommendations-title">
-              Search recommendations from JSON
-            </h2>
-            <p className="text-xs text-[#565959]" data-testid="shop-search-recommendations-meta">
-              Query: <span className="font-medium">{searchText.trim()}</span>
-              {searchRecommendationData.matched_item_id ? ` • matched item: ${searchRecommendationData.matched_item_id}` : ""}
-            </p>
-
-            {searchRecommendationLoading ? (
-              <div className="flex items-center gap-2 text-xs text-[#565959]" data-testid="shop-search-recommendations-loading">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Đang tải similar/upsell từ recommendations_all.json...
-              </div>
-            ) : searchRecommendationError ? (
-              <p className="text-xs text-[#B12704]" data-testid="shop-search-recommendations-error">
-                {searchRecommendationError}
-              </p>
-            ) : !searchRecommendationData.matched_item_id ? (
-              <p className="text-xs text-[#565959]" data-testid="shop-search-recommendations-empty">
-                Không tìm thấy item_id phù hợp cho từ khóa này.
-              </p>
-            ) : (
-              <>
-                <div className="space-y-2" data-testid="shop-similar-items-block">
-                  <h3 className="text-sm font-semibold" data-testid="shop-similar-items-title">
-                    Similar items (name + price)
-                  </h3>
-                  {hasSimilarItems ? (
-                    <div className="amazon-scrollbar flex gap-3 overflow-x-auto pb-2" data-testid="shop-similar-items-list">
-                      {searchRecommendationData.similar_items.map((item) => (
-                        <SearchRecommendationCard
-                          key={`similar-${item.item_id}`}
-                          item={item}
-                          onOpenItem={onOpenItem}
-                          sectionId="shop-similar-items"
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-[#565959]" data-testid="shop-similar-items-empty">
-                      recommendations_all.json không có similar_items cho item này.
-                    </p>
-                  )}
-                </div>
-
-                {searchRecommendationData.is_ta_query && (
-                  <div className="space-y-2" data-testid="shop-upsell-items-block">
-                    <h3 className="text-sm font-semibold" data-testid="shop-upsell-items-title">
-                      Upsell recommendations (top 5 score)
-                    </h3>
-                    {hasUpsellItems ? (
-                      <div className="amazon-scrollbar flex gap-3 overflow-x-auto pb-2" data-testid="shop-upsell-items-list">
-                        {searchRecommendationData.upsell_recommendations.map((item) => (
-                          <SearchRecommendationCard
-                            key={`upsell-${item.item_id}`}
-                            item={item}
-                            onOpenItem={onOpenItem}
-                            sectionId="shop-upsell-items"
-                            showUpsellMeta
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-[#565959]" data-testid="shop-upsell-items-empty">
-                        Không có upsell_recommendations cho từ khóa tã.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-        )}
 
         {loading ? (
           <div className="flex min-h-[220px] items-center justify-center border border-[#e7e7e7] bg-white" data-testid="shop-loading-state">
