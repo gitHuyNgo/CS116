@@ -103,3 +103,15 @@ User-confirmed expansion:
 - Rendered `sale_status` as green badge (`item_status: 1`) across product cards, detail view, and recommendation cards.
 - Updated app startup routing so first open defaults to `?view=shop`.
 - Validation complete with manual curl, Playwright screenshots, and testing-agent regression (no blocking defects).
+
+### 2026-03-18 (Detail-page recommendation logic replacement)
+- Replaced detail-page recommendation source from legacy sections (**Frequently bought together** / **Relevant alternatives**) to JSON rule-based logic.
+- Added backend endpoint `GET /api/item-recommendations/{item_id}`:
+  - if `type` is ta variant (`tã`, `Tã`, `tÃ`, `TÃ`) → return `similar_items` + upsell top 5 by score
+  - if non-ta → return `similar_items` only
+  - if no matching rule in JSON → return `has_rule=false` and frontend shows **No recommendations available for this item.**
+- Updated product detail UI to only show:
+  - **Similar items** for all ruled items
+  - **Upsell recommendations (top 5 score)** only for ta items
+- Confirmed behavior across all entry points: direct `?item_id=`, shop-card clicks, and recommendation-card clicks.
+- Regression validated by testing agent (`iteration_3.json`, backend 15 passed / 5 skipped, frontend checks passed).
